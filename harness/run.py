@@ -13,6 +13,8 @@ TSB_AD.model_wrapper with the upstream optimal hyper-parameters; the names below
 pieces of this package:
     Tremor        the whole detector (tremor.run_Tremor_Unsupervised, tremor.DEFAULT_HP)
     point         the univariate point component (tremor.point)
+    point_m       the multivariate point component, top-3 channel mean (tremor.point_m)
+    point_m_gate  the strongest channel's own point score, the M override's gate series
 """
 import os, sys, json, time, argparse, traceback
 from multiprocessing import Pool
@@ -44,7 +46,7 @@ def default_hp(track, method):
     if method == 'Tremor':
         from tremor import DEFAULT_HP
         return dict(DEFAULT_HP)
-    if method == 'point':
+    if method in ('point', 'point_m', 'point_m_gate'):
         return {}
     from TSB_AD.HP_list import Optimal_Uni_algo_HP_dict, Optimal_Multi_algo_HP_dict
     d = Optimal_Uni_algo_HP_dict if track == 'U' else Optimal_Multi_algo_HP_dict
@@ -59,6 +61,12 @@ def get_runner(method):
     if method == 'point':
         from tremor.point import run as point_run
         return lambda data, hp: point_run(data, **hp)
+    if method == 'point_m':
+        from tremor.point_m import point_m_score
+        return lambda data, hp: point_m_score(data, **hp)
+    if method == 'point_m_gate':
+        from tremor.point_m import point_m_scores
+        return lambda data, hp: point_m_scores(data, **hp)[1]
     import TSB_AD.model_wrapper as mw
     fn = getattr(mw, 'run_' + method)
     return lambda data, hp: fn(data, **hp)
