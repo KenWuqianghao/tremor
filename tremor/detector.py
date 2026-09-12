@@ -20,20 +20,26 @@ Multivariate series (D > 1): the same chooser over two components, MMPAD-M
 channel, mean of the three largest per-channel robust z per timestamp, `point_m_agg='top3z'`),
 with point-M as the flat_only member (`flat_only_m=(1,)`): it never wins the kurtosis contest
 (no Sub-PCA on M) and it takes part in the flat fallback (MMPAD-M's kurtosis < tau -> the higher
-z-max wins).  The univariate override gates are OFF on M (`override_m=None`): the channel
-aggregation compresses the point-M z scale, so the univariate thresholds do not transfer (on the
-M Tuning files they fired once, wrongly).  `point_m_agg=None` restores MMPAD-M alone.  The earlier MMPAD-M + PCA fusion (`fuse_multivariate=True`, +0.003 at 2.6x runtime)
+z-max wins).  Point-M may also replace a PEAKED MMPAD-M through the same three
+override gates (`override_m`), evaluated not on the channel-aggregated score (whose z scale is
+compressed by the aggregation: on the Tuning files they fired once, wrongly) but on the strongest
+channel's own point score (`point_m.best_channel`, passed to fuse as the gate-only component
+`gate_m=2`): that channel's z-max >= pzmin (7), the point-M top-1% disagrees with MMPAD-M's (athr
+0.5) and that channel has at most `cthr_m` (10; the univariate 5 sits just below the M plateau
+[6, 153], 10 is inside both) separate runs above sthr (10) -- one sensor with a few clear, isolated
+spikes that the multivariate discord detector diluted.  `point_m_agg=None` restores MMPAD-M alone.  The earlier MMPAD-M + PCA fusion (`fuse_multivariate=True`, +0.003 at 2.6x runtime)
 stays off.  Adaptivity comes from the series (dimensionality, score shape); nothing depends on
 a dataset name or on labels.
 """
 import numpy as np
 from .fusion import fuse
 from .point import point_score
-from .point_m import point_m_score
+from .point_m import point_m_scores
 
 DEFAULT_HP = dict(stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, tau=0.5, flat='zmax', zprior=0.0,
                   point_window='period', flat_only=(2,), override=('pz', 'agree', 'spikes'), pzmin=7.0, kfrac=0.01, athr=0.5,
-                  sthr=10.0, cthr=5, fuse_multivariate=False, point_m_agg='top3z', flat_only_m=(1,), override_m=None, n_job=1)
+                  sthr=10.0, cthr=5, fuse_multivariate=False, point_m_agg='top3z', flat_only_m=(1,),
+                  override_m=('pz', 'agree', 'spikes'), gate_m=2, cthr_m=10, n_job=1)
 
 
 class Tremor:
@@ -58,7 +64,9 @@ class Tremor:
             if self.HP['fuse_multivariate']:
                 s1 = mw.run_PCA(X, n_components=0.25)
             elif self.HP['point_m_agg'] is not None:
-                s1 = point_m_score(X, window=self.HP['point_window'] or 'period', agg=self.HP['point_m_agg'])
+                s1, s2 = point_m_scores(X, window=self.HP['point_window'] or 'period', agg=self.HP['point_m_agg'])
+                if self.HP['gate_m'] is not None:
+                    return [np.asarray(s0, float).ravel(), np.asarray(s1, float).ravel(), np.asarray(s2, float).ravel()]
             else:
                 return [np.asarray(s0, float).ravel()]
         return [np.asarray(s0, float).ravel(), np.asarray(s1, float).ravel()]
@@ -71,13 +79,15 @@ class Tremor:
         uni = X.shape[1] == 1 or self.HP['fuse_multivariate']
         flat_only = self.HP['flat_only'] if uni else self.HP['flat_only_m']
         override = self.HP['override'] if uni else self.HP['override_m']
+        gate = None if uni else self.HP['gate_m']
+        cthr = self.HP['cthr'] if uni else self.HP['cthr_m']
         if len(comps) == 1:
             self.decision_scores_ = comps[0]; self.info_ = dict(weights=[1.0], confidence=[None])
         else:
             self.decision_scores_, self.info_ = fuse(comps, stat=self.HP['stat'], power=self.HP['power'], prior=self.HP['prior'], zfloor=self.HP['zfloor'],
                                                        tau=self.HP['tau'], flat=self.HP['flat'], zprior=self.HP['zprior'], flat_only=flat_only,
                                                        override=override, pzmin=self.HP['pzmin'], kfrac=self.HP['kfrac'], athr=self.HP['athr'],
-                                                       sthr=self.HP['sthr'], cthr=self.HP['cthr'])
+                                                       sthr=self.HP['sthr'], cthr=cthr, gate=gate)
         return self
 
     def decision_function(self, X):

@@ -22,6 +22,11 @@ least `pzmin` (it found something), 'agree' at most `athr` of the point score's 
 (k = `kfrac` * n) lie in the winner's top-k (the two detectors DISAGREE on where -- when they
 agree, the context-aware winner is kept), 'spikes' the point score has at most `cthr` separate
 runs above `sthr` (specific, not firing everywhere).  `override=None` disables the gates.
+A component index `gate` may name a GATE SERIES (on M: the strongest channel's
+own point score, `point_m.best_channel`): the 'pz' and 'spikes' gates are then evaluated on that
+series instead of on the (channel-aggregated) point component, whose z scale is compressed by the
+aggregation; the gate component never wins anything -- it is excluded from the kurtosis contest
+and from the flat fallback.  'agree' stays between the point component and the winner.
 
 Only the series-derived scores are used: no labels, no dataset names.
 """
@@ -72,15 +77,17 @@ def spike_runs(s, sthr=10.0):
     return int(np.sum(above & ~np.concatenate([[False], above[:-1]])))
 
 
-def override_gate(scores, zs, chosen, point, override, pzmin, kfrac, athr, sthr, cthr):
-    """True iff every gate in `override` lets component `point` replace `chosen`."""
+def override_gate(scores, zs, chosen, point, override, pzmin, kfrac, athr, sthr, cthr, gate=None):
+    """True iff every gate in `override` lets component `point` replace `chosen`; the z floor and the
+    spike count are read from component `gate` when given (else from `point`)."""
+    g_idx = point if gate is None else int(gate)
     for g in override or ():
         if g == 'pz':
-            ok = zs[point] >= float(pzmin)
+            ok = zs[g_idx] >= float(pzmin)
         elif g == 'agree':
             ok = topk_agreement(scores[point], scores[chosen], kfrac) <= float(athr)
         elif g == 'spikes':
-            ok = spike_runs(scores[point], sthr) <= int(cthr)
+            ok = spike_runs(scores[g_idx], sthr) <= int(cthr)
         else:
             raise ValueError(g)
         if not ok:
@@ -98,13 +105,14 @@ def zmax(s):
 
 
 def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, tau=0.5, flat='zmax', zprior=0.0, flat_only=(2,),
-         override=('pz', 'agree', 'spikes'), pzmin=7.0, kfrac=0.01, athr=0.5, sthr=10.0, cthr=5):
+         override=('pz', 'agree', 'spikes'), pzmin=7.0, kfrac=0.01, athr=0.5, sthr=10.0, cthr=5, gate=None):
     """scores: list of equal-length 1-D arrays (component 0 = the anchor detector).
     zfloor: in hard mode, minimum z-max a non-anchor component needs to override the anchor
     (None = no gate).  tau / flat / zprior: hard-mode fallback when every kurtosis < tau (see
     module docstring).  flat_only: indices of components that only enter the flat fallback (hard
     mode).  override / pzmin / kfrac / athr / sthr / cthr: gates under which the first flat_only
     component replaces the non-flat winner (see module docstring; override=None or () = never).
+    gate: index of a gate-only component (never chosen) on which 'pz' / 'spikes' are evaluated.
     Returns (fused score in [0, 1], info dict with weights/confidences)."""
     ranks = [rank_norm(s) for s in scores]
     conf = np.array([confidence(s, stat) for s in scores], dtype=float)
@@ -114,7 +122,8 @@ def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, t
     if power == 'hard':
         total = conf + pri
         zs = np.array([zmax(s) for s in scores], dtype=float)
-        main = np.array([i not in set(flat_only or ()) for i in range(len(scores))])
+        excluded = set(flat_only or ()) | ({int(gate)} if gate is not None else set())
+        main = np.array([i not in excluded for i in range(len(scores))])
         if not main.any():
             main[0] = True
         is_flat = bool(tau is not None and conf[main].max() < float(tau))
@@ -129,6 +138,8 @@ def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, t
                 chosen = 1 if len(scores) > 1 else 0
             else:
                 zz = zs.copy(); zz[0] += float(zprior)
+                if gate is not None:
+                    zz[int(gate)] = -np.inf
                 chosen = int(np.argmax(zz))
             w = np.zeros(len(scores)); w[chosen] = 1.0
             return ranks[chosen], dict(weights=w.tolist(), confidence=conf.tolist(), zmax=zs.tolist(), flat=True)
@@ -138,7 +149,7 @@ def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, t
         chosen = int(np.argmax(total)) if np.isfinite(total).any() else 0
         overridden = False
         pts = [i for i in (flat_only or ()) if i < len(scores)]
-        if override and pts and chosen not in pts and override_gate(scores, zs, chosen, pts[0], override, pzmin, kfrac, athr, sthr, cthr):
+        if override and pts and chosen not in pts and override_gate(scores, zs, chosen, pts[0], override, pzmin, kfrac, athr, sthr, cthr, gate):
             chosen, overridden = pts[0], True
         w = np.zeros(len(scores)); w[chosen] = 1.0
         out = ranks[chosen]
