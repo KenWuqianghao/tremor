@@ -6,6 +6,11 @@ anomaly -- gets a small weight, a sharply peaked one dominates:
 
     fused = sum_i w_i * rank(s_i) / sum_i w_i,   w_i = (prior_i + conf(s_i) + eps) ** power
 
+In the hard-chooser mode (power='hard') a second, independent label-free signal gates the
+override: a non-anchor component may replace the anchor (component 0) only if its kurtosis
+beats the anchor's (prior included) AND the z-score of its maximum, (max - mean) / std, is at
+least `zfloor` -- a peaked score whose peak does not stand out (e.g. z-max 0.5) does not win.
+
 Only the series-derived scores are used: no labels, no dataset names.
 """
 import numpy as np
@@ -37,14 +42,31 @@ def confidence(s, stat='kurt'):
     raise ValueError(stat)
 
 
-def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0)):
+def zmax(s):
+    """z-score of the maximum of a score vector, (max - mean) / std; 0 if degenerate."""
+    s = np.asarray(s, dtype=float).ravel()
+    s = s[np.isfinite(s)]
+    if len(s) < 2 or np.std(s) == 0:
+        return 0.0
+    return float((s.max() - s.mean()) / s.std())
+
+
+def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0), zfloor=3.0):
     """scores: list of equal-length 1-D arrays (component 0 = the anchor detector).
-    Returns (fused score in [0, 1], info dict with the weights and confidences)."""
+    zfloor: in hard mode, minimum z-max a non-anchor component needs to override the anchor
+    (None = no gate).  Returns (fused score in [0, 1], info dict with weights/confidences)."""
     ranks = [rank_norm(s) for s in scores]
     conf = np.array([confidence(s, stat) for s in scores], dtype=float)
     pri = np.asarray(prior, dtype=float)[: len(scores)]
     if power == 'hard':
-        w = np.zeros(len(scores)); w[int(np.argmax(conf + pri))] = 1.0
+        total = conf + pri
+        zs = np.array([zmax(s) for s in scores], dtype=float)
+        if zfloor is not None:
+            total = np.where(np.arange(len(scores)) == 0, total, np.where(zs >= float(zfloor), total, -np.inf))
+        chosen = int(np.argmax(total)) if np.isfinite(total).any() else 0
+        w = np.zeros(len(scores)); w[chosen] = 1.0
+        out = ranks[chosen]
+        return out, dict(weights=w.tolist(), confidence=conf.tolist(), zmax=zs.tolist())
     else:
         w = (pri + conf + EPS) ** float(power)
     w = w / w.sum()

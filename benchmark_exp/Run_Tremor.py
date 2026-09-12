@@ -16,7 +16,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tremor import Tremor, run_Tremor_Unsupervised   # noqa: F401
 
 # Hyper-parameters (chosen on the TSB-AD Tuning sets only)
-Tremor_HP = {'stat': 'kurt', 'power': 'hard', 'prior': (1.0, 0.0), 'fuse_multivariate': False, 'n_job': 1}
+Tremor_HP = {'stat': 'kurt', 'power': 'hard', 'prior': (1.0, 0.0), 'zfloor': 3.0, 'fuse_multivariate': False, 'n_job': 1}
 
 if __name__ == '__main__':
     from TSB_AD.evaluation.metrics import get_metrics
