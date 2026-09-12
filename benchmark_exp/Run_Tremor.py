@@ -17,7 +17,8 @@ from tremor import Tremor, run_Tremor_Unsupervised   # noqa: F401
 
 # Hyper-parameters (chosen on the TSB-AD Tuning sets only)
 Tremor_HP = {'stat': 'kurt', 'power': 'hard', 'prior': (1.0, 0.0, 0.0), 'zfloor': 3.0, 'tau': 0.5, 'flat': 'zmax', 'zprior': 0.0,
-             'point_window': 'period', 'flat_only': (2,), 'fuse_multivariate': False, 'n_job': 1}
+             'point_window': 'period', 'flat_only': (2,), 'override': ('pz', 'agree', 'spikes'), 'pzmin': 7.0, 'kfrac': 0.01,
+             'athr': 0.5, 'sthr': 10.0, 'cthr': 5, 'fuse_multivariate': False, 'n_job': 1}
 
 if __name__ == '__main__':
     from TSB_AD.evaluation.metrics import get_metrics

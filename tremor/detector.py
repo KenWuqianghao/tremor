@@ -9,8 +9,12 @@ label-free signal that stops a peaked-but-flat residual score from winning.  Whe
 is peaked (both kurtoses < tau, 0.5) the kurtosis prior is uninformative and the detector whose
 maximum stands out most (higher z-max) is taken instead (`flat='zmax'`).  A third, O(n) point-anomaly
 component (`point.py`: robust z-score of the first differences, max-filtered over the ACF period,
-`point_window='period'`) takes part only in that flat fallback (`flat_only=(2,)`): where neither
-MMPAD nor Sub-PCA found anything, the spike detector wins if its maximum stands out most.
+`point_window='period'`) takes part in that flat fallback (`flat_only=(2,)`): where neither
+MMPAD nor Sub-PCA found anything, the spike detector wins if its maximum stands out most.  It may
+also replace a peaked winner, but only through three label-free gates (`override`): its z-max is
+>= pzmin (7), at most athr (0.5) of its top-1% positions lie in the winner's top-1% (the detectors
+disagree on where), and it has at most cthr (5) separate runs above sthr (10) -- a few strong,
+isolated spikes the context-aware detectors missed.
 Multivariate series (D > 1): MMPAD (n_dim=0.7, n_neighbor=15) alone -- the fusion with PCA
 gained only +0.003 VUS-PR on the M Tuning subset at 2.6x runtime, so it is off by default
 (`fuse_multivariate=True` turns it on).  Adaptivity comes from the series (dimensionality,
@@ -21,7 +25,8 @@ from .fusion import fuse
 from .point import point_score
 
 DEFAULT_HP = dict(stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, tau=0.5, flat='zmax', zprior=0.0,
-                  point_window='period', flat_only=(2,), fuse_multivariate=False, n_job=1)
+                  point_window='period', flat_only=(2,), override=('pz', 'agree', 'spikes'), pzmin=7.0, kfrac=0.01, athr=0.5,
+                  sthr=10.0, cthr=5, fuse_multivariate=False, n_job=1)
 
 
 class Tremor:
@@ -57,7 +62,9 @@ class Tremor:
             self.decision_scores_ = comps[0]; self.info_ = dict(weights=[1.0], confidence=[None])
         else:
             self.decision_scores_, self.info_ = fuse(comps, stat=self.HP['stat'], power=self.HP['power'], prior=self.HP['prior'], zfloor=self.HP['zfloor'],
-                                                       tau=self.HP['tau'], flat=self.HP['flat'], zprior=self.HP['zprior'], flat_only=self.HP['flat_only'])
+                                                       tau=self.HP['tau'], flat=self.HP['flat'], zprior=self.HP['zprior'], flat_only=self.HP['flat_only'],
+                                                       override=self.HP['override'], pzmin=self.HP['pzmin'], kfrac=self.HP['kfrac'], athr=self.HP['athr'],
+                                                       sthr=self.HP['sthr'], cthr=self.HP['cthr'])
         return self
 
     def decision_function(self, X):

@@ -14,10 +14,14 @@ When the kurtosis signal is uninformative -- every component's kurtosis is below
 scores flat -- the chooser falls back to the `flat` rule: 'zmax' takes the component whose
 maximum stands out most (highest z-max, the anchor's raised by `zprior`), 'residual' takes
 component 1, 'mean' averages the ranks, 'none' keeps the anchor.
-Components listed in `flat_only` (the point-anomaly component, index 2) never override a peaked
-score and do not count towards flatness: they take part only in the flat fallback, where their
-z-max competes with the others' -- a spike detector is only trusted where neither the discord
-nor the residual detector found anything.
+Components listed in `flat_only` (the point-anomaly component, index 2) do not count towards
+flatness and never win the kurtosis contest: they take part in the flat fallback, where their
+z-max competes with the others', and may replace the peaked winner only
+through the `override` gates, all computed from the score arrays: 'pz' the point z-max is at
+least `pzmin` (it found something), 'agree' at most `athr` of the point score's top-k positions
+(k = `kfrac` * n) lie in the winner's top-k (the two detectors DISAGREE on where -- when they
+agree, the context-aware winner is kept), 'spikes' the point score has at most `cthr` separate
+runs above `sthr` (specific, not firing everywhere).  `override=None` disables the gates.
 
 Only the series-derived scores are used: no labels, no dataset names.
 """
@@ -50,6 +54,40 @@ def confidence(s, stat='kurt'):
     raise ValueError(stat)
 
 
+def topk_agreement(s_a, s_b, kfrac=0.01):
+    """Fraction of s_a's top-k positions (k = kfrac * n, at least 1) that are in s_b's top-k."""
+    def topk(s):
+        s = np.nan_to_num(np.asarray(s, dtype=float).ravel(), nan=-np.inf)
+        k = max(int(round(kfrac * len(s))), 1)
+        return set(np.argpartition(-s, k - 1)[:k].tolist())
+    a = topk(s_a)
+    return len(a & topk(s_b)) / max(len(a), 1)
+
+
+def spike_runs(s, sthr=10.0):
+    """Number of separate contiguous runs of a score above sthr."""
+    above = np.nan_to_num(np.asarray(s, dtype=float).ravel(), nan=-np.inf) > float(sthr)
+    if not above.any():
+        return 0
+    return int(np.sum(above & ~np.concatenate([[False], above[:-1]])))
+
+
+def override_gate(scores, zs, chosen, point, override, pzmin, kfrac, athr, sthr, cthr):
+    """True iff every gate in `override` lets component `point` replace `chosen`."""
+    for g in override or ():
+        if g == 'pz':
+            ok = zs[point] >= float(pzmin)
+        elif g == 'agree':
+            ok = topk_agreement(scores[point], scores[chosen], kfrac) <= float(athr)
+        elif g == 'spikes':
+            ok = spike_runs(scores[point], sthr) <= int(cthr)
+        else:
+            raise ValueError(g)
+        if not ok:
+            return False
+    return True
+
+
 def zmax(s):
     """z-score of the maximum of a score vector, (max - mean) / std; 0 if degenerate."""
     s = np.asarray(s, dtype=float).ravel()
@@ -59,12 +97,15 @@ def zmax(s):
     return float((s.max() - s.mean()) / s.std())
 
 
-def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, tau=0.5, flat='zmax', zprior=0.0, flat_only=(2,)):
+def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, tau=0.5, flat='zmax', zprior=0.0, flat_only=(2,),
+         override=('pz', 'agree', 'spikes'), pzmin=7.0, kfrac=0.01, athr=0.5, sthr=10.0, cthr=5):
     """scores: list of equal-length 1-D arrays (component 0 = the anchor detector).
     zfloor: in hard mode, minimum z-max a non-anchor component needs to override the anchor
     (None = no gate).  tau / flat / zprior: hard-mode fallback when every kurtosis < tau (see
     module docstring).  flat_only: indices of components that only enter the flat fallback (hard
-    mode).  Returns (fused score in [0, 1], info dict with weights/confidences)."""
+    mode).  override / pzmin / kfrac / athr / sthr / cthr: gates under which the first flat_only
+    component replaces the non-flat winner (see module docstring; override=None or () = never).
+    Returns (fused score in [0, 1], info dict with weights/confidences)."""
     ranks = [rank_norm(s) for s in scores]
     conf = np.array([confidence(s, stat) for s in scores], dtype=float)
     pri = np.asarray(prior, dtype=float)[: len(scores)]
@@ -95,9 +136,13 @@ def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, t
             total = np.where(np.arange(len(scores)) == 0, total, np.where(zs >= float(zfloor), total, -np.inf))
         total = np.where(main, total, -np.inf)
         chosen = int(np.argmax(total)) if np.isfinite(total).any() else 0
+        overridden = False
+        pts = [i for i in (flat_only or ()) if i < len(scores)]
+        if override and pts and chosen not in pts and override_gate(scores, zs, chosen, pts[0], override, pzmin, kfrac, athr, sthr, cthr):
+            chosen, overridden = pts[0], True
         w = np.zeros(len(scores)); w[chosen] = 1.0
         out = ranks[chosen]
-        return out, dict(weights=w.tolist(), confidence=conf.tolist(), zmax=zs.tolist(), flat=is_flat)
+        return out, dict(weights=w.tolist(), confidence=conf.tolist(), zmax=zs.tolist(), flat=is_flat, override=overridden)
     else:
         w = (pri + conf + EPS) ** float(power)
     w = w / w.sum()
