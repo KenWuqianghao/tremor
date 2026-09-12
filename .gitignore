@@ -1,0 +1,15 @@
+# benchmark data, the upstream TSB-AD clone and run outputs stay out of the repository
+data/
+upstream/
+runs/
+
+*.log
+*.tar.gz
+*.parquet
+__pycache__/
+*.pyc
+.venv/
+.env
+*.egg-info/
+build/
+dist/
