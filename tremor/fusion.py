@@ -14,6 +14,10 @@ When the kurtosis signal is uninformative -- every component's kurtosis is below
 scores flat -- the chooser falls back to the `flat` rule: 'zmax' takes the component whose
 maximum stands out most (highest z-max, the anchor's raised by `zprior`), 'residual' takes
 component 1, 'mean' averages the ranks, 'none' keeps the anchor.
+Components listed in `flat_only` (the point-anomaly component, index 2) never override a peaked
+score and do not count towards flatness: they take part only in the flat fallback, where their
+z-max competes with the others' -- a spike detector is only trusted where neither the discord
+nor the residual detector found anything.
 
 Only the series-derived scores are used: no labels, no dataset names.
 """
@@ -55,18 +59,24 @@ def zmax(s):
     return float((s.max() - s.mean()) / s.std())
 
 
-def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0), zfloor=3.0, tau=0.5, flat='zmax', zprior=0.0):
+def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, tau=0.5, flat='zmax', zprior=0.0, flat_only=(2,)):
     """scores: list of equal-length 1-D arrays (component 0 = the anchor detector).
     zfloor: in hard mode, minimum z-max a non-anchor component needs to override the anchor
     (None = no gate).  tau / flat / zprior: hard-mode fallback when every kurtosis < tau (see
-    module docstring).  Returns (fused score in [0, 1], info dict with weights/confidences)."""
+    module docstring).  flat_only: indices of components that only enter the flat fallback (hard
+    mode).  Returns (fused score in [0, 1], info dict with weights/confidences)."""
     ranks = [rank_norm(s) for s in scores]
     conf = np.array([confidence(s, stat) for s in scores], dtype=float)
     pri = np.asarray(prior, dtype=float)[: len(scores)]
+    if len(pri) < len(scores):
+        pri = np.concatenate([pri, np.zeros(len(scores) - len(pri))])
     if power == 'hard':
         total = conf + pri
         zs = np.array([zmax(s) for s in scores], dtype=float)
-        is_flat = bool(tau is not None and conf.max() < float(tau))
+        main = np.array([i not in set(flat_only or ()) for i in range(len(scores))])
+        if not main.any():
+            main[0] = True
+        is_flat = bool(tau is not None and conf[main].max() < float(tau))
         if is_flat and flat == 'mean':
             w = np.ones(len(scores)) / len(scores)
             out = np.zeros_like(ranks[0])
@@ -83,6 +93,7 @@ def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0), zfloor=3.0, tau=0.
             return ranks[chosen], dict(weights=w.tolist(), confidence=conf.tolist(), zmax=zs.tolist(), flat=True)
         if zfloor is not None:
             total = np.where(np.arange(len(scores)) == 0, total, np.where(zs >= float(zfloor), total, -np.inf))
+        total = np.where(main, total, -np.inf)
         chosen = int(np.argmax(total)) if np.isfinite(total).any() else 0
         w = np.zeros(len(scores)); w[chosen] = 1.0
         out = ranks[chosen]

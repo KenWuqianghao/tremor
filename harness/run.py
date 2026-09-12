@@ -2,7 +2,7 @@
 
     python harness/run.py --track U --split tuning --method MMPAD --workers 4
     python harness/run.py --track U --split eval --method Sub_PCA --subset half
-    python harness/run.py --track U --split tuning --method Tremor --workers 4
+    python harness/run.py --track U --split eval --method Tremor --workers 4
 
 Per-file results are written as JSON under runs/<track>_<split>_<method><tag>/ so an
 interrupted run resumes where it stopped.  Scores are saved as float32 .npy next to them, so
@@ -12,6 +12,7 @@ Methods: the upstream names (MMPAD, Sub_PCA, PCA, KShapeAD, MatrixProfile, ...) 
 TSB_AD.model_wrapper with the upstream optimal hyper-parameters; the names below run the
 pieces of this package:
     Tremor        the whole detector (tremor.run_Tremor_Unsupervised, tremor.DEFAULT_HP)
+    point         the univariate point component (tremor.point)
 """
 import os, sys, json, time, argparse, traceback
 from multiprocessing import Pool
@@ -43,6 +44,8 @@ def default_hp(track, method):
     if method == 'Tremor':
         from tremor import DEFAULT_HP
         return dict(DEFAULT_HP)
+    if method == 'point':
+        return {}
     from TSB_AD.HP_list import Optimal_Uni_algo_HP_dict, Optimal_Multi_algo_HP_dict
     d = Optimal_Uni_algo_HP_dict if track == 'U' else Optimal_Multi_algo_HP_dict
     return dict(d.get(method, {}))
@@ -53,6 +56,9 @@ def get_runner(method):
     if method == 'Tremor':
         from tremor import run_Tremor_Unsupervised
         return lambda data, hp: run_Tremor_Unsupervised(np.asarray(data, dtype=float), **hp)
+    if method == 'point':
+        from tremor.point import run as point_run
+        return lambda data, hp: point_run(data, **hp)
     import TSB_AD.model_wrapper as mw
     fn = getattr(mw, 'run_' + method)
     return lambda data, hp: fn(data, **hp)

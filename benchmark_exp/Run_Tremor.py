@@ -1,5 +1,5 @@
 # -*- coding: utf-8 -*-
-# Tremor for TSB-AD: confidence-weighted rank fusion of MMPAD and Sub-PCA (CPU-only).
+# Tremor for TSB-AD: confidence-weighted rank fusion of MMPAD, Sub-PCA and a point-anomaly score (CPU-only).
 # Layout follows benchmark_exp/Run_Custom_Detector.py.  License: Apache-2.0.
 #
 # Registration in TSB_AD (for Run_Detector_U.py / Run_Detector_M.py):
@@ -16,8 +16,8 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tremor import Tremor, run_Tremor_Unsupervised   # noqa: F401
 
 # Hyper-parameters (chosen on the TSB-AD Tuning sets only)
-Tremor_HP = {'stat': 'kurt', 'power': 'hard', 'prior': (1.0, 0.0), 'zfloor': 3.0, 'tau': 0.5, 'flat': 'zmax', 'zprior': 0.0,
-             'fuse_multivariate': False, 'n_job': 1}
+Tremor_HP = {'stat': 'kurt', 'power': 'hard', 'prior': (1.0, 0.0, 0.0), 'zfloor': 3.0, 'tau': 0.5, 'flat': 'zmax', 'zprior': 0.0,
+             'point_window': 'period', 'flat_only': (2,), 'fuse_multivariate': False, 'n_job': 1}
 
 if __name__ == '__main__':
     from TSB_AD.evaluation.metrics import get_metrics
