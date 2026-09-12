@@ -10,6 +10,10 @@ In the hard-chooser mode (power='hard') a second, independent label-free signal 
 override: a non-anchor component may replace the anchor (component 0) only if its kurtosis
 beats the anchor's (prior included) AND the z-score of its maximum, (max - mean) / std, is at
 least `zfloor` -- a peaked score whose peak does not stand out (e.g. z-max 0.5) does not win.
+When the kurtosis signal is uninformative -- every component's kurtosis is below `tau`, both
+scores flat -- the chooser falls back to the `flat` rule: 'zmax' takes the component whose
+maximum stands out most (highest z-max, the anchor's raised by `zprior`), 'residual' takes
+component 1, 'mean' averages the ranks, 'none' keeps the anchor.
 
 Only the series-derived scores are used: no labels, no dataset names.
 """
@@ -51,22 +55,38 @@ def zmax(s):
     return float((s.max() - s.mean()) / s.std())
 
 
-def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0), zfloor=3.0):
+def fuse(scores, stat='kurt', power='hard', prior=(1.0, 0.0), zfloor=3.0, tau=0.5, flat='zmax', zprior=0.0):
     """scores: list of equal-length 1-D arrays (component 0 = the anchor detector).
     zfloor: in hard mode, minimum z-max a non-anchor component needs to override the anchor
-    (None = no gate).  Returns (fused score in [0, 1], info dict with weights/confidences)."""
+    (None = no gate).  tau / flat / zprior: hard-mode fallback when every kurtosis < tau (see
+    module docstring).  Returns (fused score in [0, 1], info dict with weights/confidences)."""
     ranks = [rank_norm(s) for s in scores]
     conf = np.array([confidence(s, stat) for s in scores], dtype=float)
     pri = np.asarray(prior, dtype=float)[: len(scores)]
     if power == 'hard':
         total = conf + pri
         zs = np.array([zmax(s) for s in scores], dtype=float)
+        is_flat = bool(tau is not None and conf.max() < float(tau))
+        if is_flat and flat == 'mean':
+            w = np.ones(len(scores)) / len(scores)
+            out = np.zeros_like(ranks[0])
+            for wi, r in zip(w, ranks):
+                out += wi * r
+            return out, dict(weights=w.tolist(), confidence=conf.tolist(), zmax=zs.tolist(), flat=True)
+        if is_flat and flat in ('residual', 'zmax'):
+            if flat == 'residual':
+                chosen = 1 if len(scores) > 1 else 0
+            else:
+                zz = zs.copy(); zz[0] += float(zprior)
+                chosen = int(np.argmax(zz))
+            w = np.zeros(len(scores)); w[chosen] = 1.0
+            return ranks[chosen], dict(weights=w.tolist(), confidence=conf.tolist(), zmax=zs.tolist(), flat=True)
         if zfloor is not None:
             total = np.where(np.arange(len(scores)) == 0, total, np.where(zs >= float(zfloor), total, -np.inf))
         chosen = int(np.argmax(total)) if np.isfinite(total).any() else 0
         w = np.zeros(len(scores)); w[chosen] = 1.0
         out = ranks[chosen]
-        return out, dict(weights=w.tolist(), confidence=conf.tolist(), zmax=zs.tolist())
+        return out, dict(weights=w.tolist(), confidence=conf.tolist(), zmax=zs.tolist(), flat=is_flat)
     else:
         w = (pri + conf + EPS) ** float(power)
     w = w / w.sum()
