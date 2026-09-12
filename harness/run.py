@@ -2,13 +2,16 @@
 
     python harness/run.py --track U --split tuning --method MMPAD --workers 4
     python harness/run.py --track U --split eval --method Sub_PCA --subset half
+    python harness/run.py --track U --split tuning --method Tremor --workers 4
 
 Per-file results are written as JSON under runs/<track>_<split>_<method><tag>/ so an
 interrupted run resumes where it stopped.  Scores are saved as float32 .npy next to them, so
 the chooser can later be screened on cached component scores (harness/fuse_eval.py).
 
 Methods: the upstream names (MMPAD, Sub_PCA, PCA, KShapeAD, MatrixProfile, ...) run through
-TSB_AD.model_wrapper with the upstream optimal hyper-parameters.
+TSB_AD.model_wrapper with the upstream optimal hyper-parameters; the names below run the
+pieces of this package:
+    Tremor        the whole detector (tremor.run_Tremor_Unsupervised, tremor.DEFAULT_HP)
 """
 import os, sys, json, time, argparse, traceback
 from multiprocessing import Pool
@@ -37,6 +40,9 @@ def select_subset(files, subset):
 
 def default_hp(track, method):
     setup_paths()
+    if method == 'Tremor':
+        from tremor import DEFAULT_HP
+        return dict(DEFAULT_HP)
     from TSB_AD.HP_list import Optimal_Uni_algo_HP_dict, Optimal_Multi_algo_HP_dict
     d = Optimal_Uni_algo_HP_dict if track == 'U' else Optimal_Multi_algo_HP_dict
     return dict(d.get(method, {}))
@@ -44,6 +50,9 @@ def default_hp(track, method):
 
 def get_runner(method):
     setup_paths()
+    if method == 'Tremor':
+        from tremor import run_Tremor_Unsupervised
+        return lambda data, hp: run_Tremor_Unsupervised(np.asarray(data, dtype=float), **hp)
     import TSB_AD.model_wrapper as mw
     fn = getattr(mw, 'run_' + method)
     return lambda data, hp: fn(data, **hp)
@@ -60,7 +69,7 @@ def one(args):
     try:
         data, label = load_series(track, fn)
         hp = dict(hp)
-        if method == 'MMPAD':
+        if method in ('MMPAD', 'Tremor'):
             hp['n_job'] = n_job
         run = get_runner(method)
         t0 = time.time()
@@ -129,7 +138,7 @@ def main():
         cfg.update(max_cost=a.max_cost, skipped_over_cost=skipped, files=files, n_files=len(files))
         json.dump(cfg, open(os.path.join(out_dir, '000_config.json'), 'w'), indent=1)
         print(f'skipping {len(skipped)} files over cost cap {a.max_cost:g}', flush=True)
-    big = [f for f in files if a.method == 'MMPAD' and cost.get(f, 0) > a.big_cost]
+    big = [f for f in files if a.method in ('MMPAD', 'Tremor') and cost.get(f, 0) > a.big_cost]
     small = [f for f in files if f not in set(big)]
     print(f'{a.track}/{a.split}/{name}: {len(files)} files ({len(big)} big), hp={hp}', flush=True)
 
