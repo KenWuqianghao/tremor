@@ -42,6 +42,32 @@ DEFAULT_HP = dict(stat='kurt', power='hard', prior=(1.0, 0.0, 0.0), zfloor=3.0, 
                   override_m=('pz', 'agree', 'spikes'), gate_m=2, cthr_m=10, n_job=1)
 
 
+def fuse_components(comps, HP=None, multivariate=False):
+    """Apply the promoted chooser to component scores that are already computed.
+
+    `comps` is [MMPAD, Sub-PCA, point] on the univariate path and
+    [MMPAD-M, point-M, strongest-channel point score] on the multivariate one -- exactly what
+    `Tremor._components` returns.  This is the whole decision layer of the detector: no series
+    is read and no detector is run, so the tests can replay it on cached component scores.
+    `multivariate` selects the M variants of the four path-dependent hyper-parameters
+    (flat_only_m / override_m / gate_m / cthr_m); it is False whenever `fuse_multivariate`
+    puts a D > 1 series through the univariate rule, exactly as `Tremor.fit` does.
+    """
+    hp = dict(DEFAULT_HP); hp.update(HP or {})
+    comps = [np.asarray(c, dtype=float).ravel() for c in comps]
+    if len(comps) == 1:
+        return comps[0], dict(weights=[1.0], confidence=[None])
+    uni = not multivariate
+    flat_only = hp['flat_only'] if uni else hp['flat_only_m']
+    override = hp['override'] if uni else hp['override_m']
+    gate = None if uni else hp['gate_m']
+    cthr = hp['cthr'] if uni else hp['cthr_m']
+    return fuse(comps, stat=hp['stat'], power=hp['power'], prior=hp['prior'], zfloor=hp['zfloor'],
+                tau=hp['tau'], flat=hp['flat'], zprior=hp['zprior'], flat_only=flat_only,
+                override=override, pzmin=hp['pzmin'], kfrac=hp['kfrac'], athr=hp['athr'],
+                sthr=hp['sthr'], cthr=cthr, gate=gate)
+
+
 class Tremor:
     """TSB-AD-style detector: fit(X) sets decision_scores_ (one score per timestamp)."""
 
@@ -77,17 +103,7 @@ class Tremor:
             X = X.reshape(-1, 1)
         comps = self._components(X)
         uni = X.shape[1] == 1 or self.HP['fuse_multivariate']
-        flat_only = self.HP['flat_only'] if uni else self.HP['flat_only_m']
-        override = self.HP['override'] if uni else self.HP['override_m']
-        gate = None if uni else self.HP['gate_m']
-        cthr = self.HP['cthr'] if uni else self.HP['cthr_m']
-        if len(comps) == 1:
-            self.decision_scores_ = comps[0]; self.info_ = dict(weights=[1.0], confidence=[None])
-        else:
-            self.decision_scores_, self.info_ = fuse(comps, stat=self.HP['stat'], power=self.HP['power'], prior=self.HP['prior'], zfloor=self.HP['zfloor'],
-                                                       tau=self.HP['tau'], flat=self.HP['flat'], zprior=self.HP['zprior'], flat_only=flat_only,
-                                                       override=override, pzmin=self.HP['pzmin'], kfrac=self.HP['kfrac'], athr=self.HP['athr'],
-                                                       sthr=self.HP['sthr'], cthr=cthr, gate=gate)
+        self.decision_scores_, self.info_ = fuse_components(comps, self.HP, multivariate=not uni)
         return self
 
     def decision_function(self, X):

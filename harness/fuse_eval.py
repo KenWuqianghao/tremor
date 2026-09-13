@@ -1,11 +1,14 @@
 """Evaluate the chooser on CACHED component scores with the benchmark's own scoring.
 
     python harness/fuse_eval.py --track U --split tuning \
-        --components U_tuning_MMPAD,U_tuning_Sub_PCA --hp '{"power": "hard"}' --tag _hard
+        --components U_tuning_MMPAD,U_tuning_Sub_PCA,U_tuning_point --tag _default
+    python harness/fuse_eval.py --track U --split tuning \
+        --components U_tuning_MMPAD,U_tuning_Sub_PCA,U_tuning_point --hp '{"pzmin": 6}' --tag _pz6
 
-Components are the run dirs written by run.py, in the order the chooser expects (the anchor
-first).  `--hp` is a JSON dict of keyword arguments for tremor.fusion.fuse, so a threshold
-sweep is a shell loop over this script that never re-runs a detector.  Only files present (ok=True, .npy saved) in ALL component run dirs are scored.
+Components are the run dirs written by run.py, in the order the chooser expects
+(U: MMPAD, Sub-PCA, point; M: MMPAD, point_m, point_m_gate).  `--hp` is a JSON dict laid over
+tremor.DEFAULT_HP, so a threshold sweep is a shell loop over this script that never re-runs a
+detector.  Only files present (ok=True, .npy saved) in ALL component run dirs are scored.
 Output goes to runs/<track>_<split>_tremor<tag>/ in the same per-file JSON format as run.py,
 so report.py works unchanged.  runtime_s per file = sum of the component detector runtimes +
 fusion time (the honest cost of the fused detector).  Tuning lists only: this script refuses
@@ -25,7 +28,7 @@ def one(args):
         return json.load(open(jpath))
     setup_paths()
     import warnings; warnings.filterwarnings('ignore')
-    from tremor.fusion import fuse
+    from tremor import fuse_components
     row = dict(file=fn, dataset=dataset_of(fn), method='tremor')
     try:
         data, label = load_series(track, fn)
@@ -35,7 +38,7 @@ def one(args):
             comp_rt += float(r['runtime_s']); comp_vus.append(float(r['VUS-PR']))
             scores.append(np.load(os.path.join(d, fn.replace('.csv', '.npy'))).astype(float))
         t0 = time.time()
-        out, info = fuse(scores, **hp)
+        out, info = fuse_components(scores, hp, multivariate=(track == 'M'))
         row['fuse_s'] = time.time() - t0
         row['runtime_s'] = comp_rt + row['fuse_s']
         row.update(info); row['component_vus_pr'] = comp_vus
@@ -60,7 +63,7 @@ def main():
     ap.add_argument('--track', required=True, choices=['U', 'M'])
     ap.add_argument('--split', required=True, choices=['tuning'])  # never eval from here
     ap.add_argument('--components', required=True, help='comma-separated run dir names under runs/')
-    ap.add_argument('--hp', default='{}', help='JSON dict of keyword arguments for tremor.fusion.fuse')
+    ap.add_argument('--hp', default='{}', help='JSON dict laid over tremor.DEFAULT_HP')
     ap.add_argument('--tag', default='')
     ap.add_argument('--workers', type=int, default=2)
     a = ap.parse_args()
