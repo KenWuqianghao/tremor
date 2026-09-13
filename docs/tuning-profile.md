@@ -67,6 +67,9 @@ Largest per-series MMPAD losses vs. the best other method:
 | 149_SMAP_id_6_Sensor_tr_2128_1st_5000.csv | 8512 | 0.137 | - | - |
 | 164_SMAP_id_21_Sensor_tr_1976_1st_4200.csv | 7907 | 0.010 | - | - |
 
+The M Tuning set was later widened to 14 and then 15 files (`EXPERIMENTS.md`, experiments 7
+and 8); the widened MMPAD-M means are 0.4193 (14 files) and 0.4368 (15 files).
+
 ## Eval reproduction (the one Eval run made before any tuning)
 
 | track | method | files scored / listed | my VUS-PR | reference on same files | reference full list | max per-file abs diff | runtime (min) |

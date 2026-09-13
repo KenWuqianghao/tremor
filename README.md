@@ -63,23 +63,23 @@ chooser is an argmax over four statistics.
 
 | track | files run | share of the Eval list (files / MMPAD proxy cost) | **Tremor** | published MMPAD, same files | published 2nd ref, same files | published MMPAD, full list |
 |---|---|---|---|---|---|---|
-| U | **339 / 350** | 96.9% / 23.7% | **0.6142** | 0.4400 (**+0.1742**) | Sub-PCA 0.4277 (+0.1865) | 0.4399 |
+| **U** | **350 / 350 — the complete list** | **100% / 100%** | **0.6085** | 0.4399 (**+0.1686**) | Sub-PCA 0.4234 (+0.1851) | 0.4399 |
 | M | **75 / 180** | 41.7% / **1.1%** | **0.4632** | 0.3276 (**+0.1357**) | PCA-M 0.3180 † | 0.3539 |
 
 † The M track has no Sub-PCA row (Sub-PCA is univariate).  The authors' second M reference is
 PCA-M, whose **published table I found not reproducible** with HEAD code — treat that cell as
 indicative only.
 
-Per-file on the U subset: **201 files better than published MMPAD, 47 worse, 91 identical**;
-0 failures.  On the M subset: 45 / 14 / 16.
+Per-file on the full U list: **204 files better than published MMPAD, 51 worse, 95 identical**;
+0 failures; 24.7 core-hours of detector time.  On the M subset: 45 / 14 / 16.
 
-Neither row is a full-list number.  The U subset is close to unbiased and the 0.6142 is above
-every published entry in the leaderboard table above, including the fine-tuned foundation
-models, but on 96.9% of the files; the M subset is biased in Tremor's favour.  See the next
-section for both.
+The U row is a **full-list** number on the authors' own 350-series Eval set, scored with the
+benchmark's own `get_metrics` and compared against the authors' own published per-series values on
+the same files.  It is above every published entry in the leaderboard table above, including the
+fine-tuned foundation models.  **The M row is not**: see the next section.
 
 <details>
-<summary>U Eval per dataset, 339 files (Tremor vs published MMPAD vs published Sub-PCA)</summary>
+<summary>U Eval per dataset, all 350 files (Tremor vs published MMPAD vs published Sub-PCA)</summary>
 
 | dataset | n | Tremor | MMPAD | Sub-PCA | vs MMPAD |
 |---|---|---|---|---|---|
@@ -96,9 +96,12 @@ section for both.
 | Stock | 8 | 0.658 | 0.586 | 0.840 | +0.072 |
 | NAB | 23 | 0.433 | 0.390 | 0.436 | +0.043 |
 | TAO | 2 | 0.930 | 0.929 | 0.930 | +0.002 |
-| LTDB / SED / MGAB / Power | 8 / 2 / 8 / 1 | 0.630 / 0.714 / 0.308 / 0.185 | identical | 0.556 / 0.031 / 0.005 / 0.076 | 0.000 |
-| UCR | 68 | 0.477 | 0.487 | 0.127 | -0.010 |
+| MITDB | 7 | 0.632 | 0.632 | 0.363 | 0.000 |
+| SED / MGAB / LTDB / Power | 2 / 8 / 8 / 1 | 0.714 / 0.308 / 0.630 / 0.185 | identical | 0.031 / 0.005 / 0.556 / 0.076 | 0.000 |
+| SWaT | 1 | 0.070 | 0.070 | 0.393 | -0.000 |
+| UCR | 70 | 0.463 | 0.473 | 0.124 | -0.010 |
 | TODS | 13 | 0.720 | 0.733 | 0.540 | -0.013 |
+| CATSv2 | 1 | 0.265 | 0.291 | 0.265 | -0.027 |
 | SVDB | 18 | 0.526 | 0.581 | 0.522 | **-0.056** |
 
 Worst files: 006_NAB 0.17 vs 0.87, 385/463_UCR 0.25 vs 0.92 (the same series twice), 780_YAHOO
@@ -113,8 +116,9 @@ The M per-dataset table and the subset bias analysis are in [docs/eval-results.m
 
 ## What this does **not** establish
 
-**Neither Eval number is a full-list number, and the M number is biased in Tremor's favour.**
-Stated precisely:
+The U number is a full-list number and carries no coverage caveat.  **The M number does:  Tremor
+has not been run on the full TSB-AD-M Eval list, and the M number above is biased in Tremor's
+favour.**  Stated precisely:
 
 * The subset rule is label-free — a cap on the MMPAD proxy cost, a function of series length and
   dimensionality only, the same rule that defines the Tuning sets.  It is **not** independent of
@@ -134,14 +138,15 @@ Stated precisely:
 * The M track's second published reference, PCA-M, was found **not reproducible** with HEAD code
   during the reproduction step (0.654 vs a published 0.440 on the same files); treat that column
   as stale.
-* **U: 11 of 350 files are missing** (7 MITDB, 2 UCR, CATSv2, SWaT — 3.1% of the files but
-  **76.3% of the track's compute**).  MMPAD's own published mean is 0.4352 on those 11 vs 0.4400
-  on the kept 339, so the U subset is close to unbiased; substituting published MMPAD on the 11
-  (i.e. assuming Tremor merely ties there) gives a **full-list-equivalent 0.6085**.  The residual
-  risk is long ECG (7 of the 11 are MITDB, and SVDB is already Tremor's worst dataset inside the
-  subset), but 11 files can move the mean by at most 0.014.  Those 11 files are running now.
+* **U has no coverage caveat left.**  All 350 files ran (24.7 core-hours, 0 failures).  The
+  earlier 339-file cost-capped number was 0.6142; completing the 11 most expensive files (7 MITDB,
+  2 UCR, CATSv2, SWaT — 3.1% of the files but **76.3% of the track's compute**) moved it to
+  0.6085, exactly the value the subset bias analysis had predicted.  On those 11 Tremor scores
+  0.4328 vs MMPAD 0.4352: **all seven MITDB files are identical to four decimals** (on long ECG
+  the point component fires hundreds of times and the spike gate correctly holds it out, so the
+  chooser keeps MMPAD), 331_UCR +0.0003, 525_UCR identical, 550_SWaT -0.0001, 286_CATSv2 -0.0266.
 * **A leaderboard row requires the maintainers' own full run.**  Nothing here is a submitted or
-  verified number, and I will not open a PR before the U list is complete.
+  verified number.  See [docs/SUBMISSION.md](docs/SUBMISSION.md).
 * The Tuning means come from 47 and **15** files.  The M rule in particular was decided on a
   two-target set (see the `cthr_m` caveat below).
 
@@ -319,5 +324,6 @@ proxy cost), which `--max-cost` and `eval_compare.py` read.  Data goes in `data/
 | `docs/methods.md` | what MMPAD, Sub-PCA, KShapeAD and MatrixProfile actually compute |
 | `docs/tuning-profile.md` | the reference methods on the Tuning sets, and the reproduction against the published tables |
 | `docs/eval-results.md` | the Eval runs in full: per-dataset tables for both tracks and the subset bias analysis |
+| `docs/SUBMISSION.md` | the text and steps for the TSB-AD leaderboard PR (U track only) |
 
 License: Apache-2.0, matching TSB-AD.  Per-dataset licences apply to the data.

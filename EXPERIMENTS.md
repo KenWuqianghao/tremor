@@ -34,6 +34,7 @@ suspected label leak.  A threshold is accepted only if it sits on a measured pla
 | 7 | Widen M to 14 files; point-M | per-channel point score, mean of the top-3 channel z, flat fallback only | unchanged (verified on 47 files) | 0.4193 -> **0.5217** (14 files) | kept | +0.1024, changes exactly the 6 files where MMPAD-M is flat |
 | 8 | Widen M to 15 files; strongest-channel gate | the U gates evaluated on the strongest channel's own point score | unchanged | 0.5324 -> **0.6373** (15 files) | kept | +0.1049, exactly 2 files change, both up; 0.0015 from the oracle |
 | 9 | Eval, cost-capped subsets | no code change | Eval 0.6142 on 339/350 | Eval 0.4632 on 75/180 (biased) | — | held-out check; nothing changed on the basis of it |
+| 10 | Eval, full U list | no code change; the 11 expensive files run | Eval **0.6085 on 350/350** | unchanged | — | matched the 0.6085 the bias analysis had predicted |
 
 ---
 
@@ -289,8 +290,28 @@ excluded files vs 0.4400 on the 339).  **The M subset is biased in Tremor's favo
 reported that way everywhere — see README.md, "What this does not establish", and
 `docs/eval-results.md`.
 
+---
+
+## 10. The full U Eval list (no code change)
+
+The 11 U files above the 6e10 cost cap (7 MITDB, 2 UCR, CATSv2, SWaT — 3.1% of the files but
+**76.3% of the U track's proxy cost**, 18.9 of 24.7 core-hours) were run with the cap lifted,
+completing the **full 350-file U Eval list** in 5 h 37 min wall with 0 failures.
+
+| track | files | share of the Eval list (files / cost) | **Tremor** | MMPAD same files | Sub-PCA same files |
+|---|---|---|---|---|---|
+| U | **350 / 350** | **100% / 100%** | **0.6085** | 0.4399 (**+0.1686**) | 0.4234 (+0.1851) |
+
+204 files up / 51 down / 95 identical.  The experiment-9 bias analysis had *predicted* a
+full-list-equivalent of **0.6085**; the measured value is **0.6085**.  On the 11 newly run files
+Tremor scores 0.4328 vs MMPAD 0.4352 — all seven MITDB files identical to four decimals (the spike
+gate correctly keeps the point component out of long ECG, so the chooser keeps MMPAD), 331_UCR
++0.0003, 525_UCR identical, 550_SWaT -0.0001, 286_CATSv2 -0.0266.  **The M track was not touched
+and remains a biased 41.7%-of-files / 1.1%-of-cost subset.**  Full tables in
+`docs/eval-results.md`.
+
 Packaging work (`pyproject.toml`, `tremor/cli.py`, `tests/`, `README.md`, this file) landed
-after this check; **no scoring code, hyper-parameter or decision was touched.**
+alongside; **no scoring code, hyper-parameter or decision was touched.**
 
 ---
 
