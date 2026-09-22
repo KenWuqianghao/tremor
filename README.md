@@ -70,7 +70,7 @@ chooser is an argmax over four statistics.
 PCA-M, whose **published table I found not reproducible** with HEAD code — treat that cell as
 indicative only.
 
-Per-file on the full U list: **204 files better than published MMPAD, 51 worse, 95 identical**;
+Per-file on the full U list: **150 files higher than published MMPAD, 45 lower, 155 identical**;
 0 failures; 24.7 core-hours of detector time.  On the M subset: 45 / 14 / 16.
 
 The U row is a **full-list** number on the authors' own 350-series Eval set, scored with the

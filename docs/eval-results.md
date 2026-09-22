@@ -20,7 +20,7 @@ of its proxy cost.**
 | U (cost-capped, superseded) | `--max-cost 6e10` | 339 / 350 | 96.9% | 23.7% | 0.6142 | 0.4400 | Sub-PCA 0.4277 | 0.4399 |
 | M (cost-capped, still the only M number) | `--max-cost 1e11` | **75 / 180** | 41.7% | **1.1%** | 0.4632 | 0.3276 | PCA-M 0.3180 | 0.3539 |
 
-Per-file on the full U list: **204 up / 51 down / 95 identical** vs published MMPAD.
+Per-file on the full U list: **150 up / 45 down / 155 identical** vs published MMPAD.
 
 ### The cost-capped subset was nearly unbiased — now measured, not argued
 
