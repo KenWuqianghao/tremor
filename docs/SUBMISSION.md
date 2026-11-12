@@ -62,7 +62,7 @@ gh pr create --repo TheDatumOrg/TSB-AD --base main \
 >
 > **The number.**  On the full TSB-AD-U Eval list (350/350 files, 0 failures), Tremor's mean
 > VUS-PR is **0.6085**, next to the published MMPAD 0.4399 (+0.1686) and Sub-PCA 0.4234
-> (+0.1851) on the same files.  Per file: 150 higher than MMPAD, 45 lower, 155 identical.  Scores
+> (+0.1851) on the same files.  Per file: 137 higher than MMPAD, 38 lower, 175 equal.  Scores
 > were produced by `TSB_AD.evaluation.metrics.get_metrics` with
 > `find_length_rank(data[:,0], rank=1)`, exactly as `Run_Detector_U.py` does; the reference
 > values are the per-series files in `benchmark_exp/leaderboard_results/` and

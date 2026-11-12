@@ -302,7 +302,7 @@ completing the **full 350-file U Eval list** in 5 h 37 min wall with 0 failures.
 |---|---|---|---|---|---|
 | U | **350 / 350** | **100% / 100%** | **0.6085** | 0.4399 (**+0.1686**) | 0.4234 (+0.1851) |
 
-150 files up / 45 down / 155 identical.  The experiment-9 bias analysis had *predicted* a
+137 files up / 38 down / 175 equal (differences larger than 1e-6).  The experiment-9 bias analysis had *predicted* a
 full-list-equivalent of **0.6085**; the measured value is **0.6085**.  On the 11 newly run files
 Tremor scores 0.4328 vs MMPAD 0.4352 — all seven MITDB files identical to four decimals (the spike
 gate correctly keeps the point component out of long ECG, so the chooser keeps MMPAD), 331_UCR
